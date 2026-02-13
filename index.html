@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>tanθ Visualizer - Enhanced Marks</title>
+<style>
+body{
+  margin:0;
+  overflow:hidden;
+  background:#0e0f13;
+  color:white;
+  font-family:Segoe UI;
+}
+canvas{display:block;}
+
+label{
+  position:absolute;
+  top:15px;
+  left:20px;
+  font-size:18px;
+}
+#speedLabel{left:260px;}
+
+#themeBox{
+  position:absolute;
+  bottom:20px;
+  left:20px;
+}
+
+#themeBox button{
+  padding:8px 14px;
+  margin-right:8px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+  font-weight:bold;
+  background:#222;
+  color:white;
+}
+
+#themeBox button:hover{
+  opacity:0.8;
+}
+</style>
+</head>
+<body>
+
+<label>半径:
+<input id="radiusSlider" type="range" min="60" max="260" value="140">
+</label>
+
+<label id="speedLabel">速度:
+<input id="speedSlider" type="range" min="0" max="0.1" step="0.001" value="0.025">
+</label>
+
+<div id="themeBox">
+  <button onclick="setTheme(0)">Space</button>
+  <button onclick="setTheme(1)">Neon</button>
+  <button onclick="setTheme(2)">Chalk</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+
+function resize(){
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight;
+}
+window.addEventListener("resize",resize);
+resize();
+
+let cx,cy;
+function updateCenter(){
+  //円をもっと右に移動ここでする
+  cx=canvas.width/2 + 380; 
+  cy=canvas.height/2 + 80;
+}
+updateCenter();
+window.addEventListener("resize",updateCenter);
+
+const radiusSlider=document.getElementById("radiusSlider");
+const speedSlider=document.getElementById("speedSlider");
+
+let r=parseFloat(radiusSlider.value);
+let speed=parseFloat(speedSlider.value);
+
+radiusSlider.oninput=()=>r=parseFloat(radiusSlider.value);
+speedSlider.oninput=()=>speed=parseFloat(speedSlider.value);
+
+let theme=0;
+
+const themes=[
+  {
+    bgTop:"#0b0c20",
+    bgBottom:"#000010",
+    circle:"#ccc",
+    axis:"#666",
+    tan:"#ff66ff",
+    text:"white",
+    stars:true
+  },
+  {
+    bgTop:"#001a1a",
+    bgBottom:"#000000",
+    circle:"#00ffff",
+    axis:"#00aaaa",
+    tan:"#00ffcc",
+    text:"#00ffff",
+    stars:false
+  },
+  {
+    bgTop:"#1e2b1e",
+    bgBottom:"#1e2b1e",
+    circle:"#f5f5dc",
+    axis:"#ccccaa",
+    tan:"#ffcc66",
+    text:"#f5f5dc",
+    stars:false
+  }
+];
+
+function setTheme(t){
+  theme=t;
+}
+
+function applyGlow(color,blur=20){
+  ctx.shadowColor=color;
+  ctx.shadowBlur=blur;
+}
+function clearGlow(){
+  ctx.shadowBlur=0;
+}
+
+let stars=[];
+function createStars(){
+  stars=[];
+  const colors=["255,255,255","200,220,255","255,240,200"];
+  for(let i=0;i<300;i++){
+    stars.push({
+      x:Math.random()*canvas.width,
+      y:Math.random()*canvas.height,
+      r:Math.random()*1.3+0.3,
+      a:0.3+Math.random()*0.7,
+      d:0.005+Math.random()*0.02,
+      c:colors[Math.floor(Math.random()*colors.length)]
+    });
+  }
+}
+createStars();
+window.addEventListener("resize",createStars);
+
+function drawBackground(){
+  const th=themes[theme];
+
+  const g=ctx.createLinearGradient(0,0,0,canvas.height);
+  g.addColorStop(0,th.bgTop);
+  g.addColorStop(1,th.bgBottom);
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  if(th.stars){
+    for(const s of stars){
+      s.a+=s.d;
+      if(s.a>1||s.a<0.2) s.d*=-1;
+      ctx.fillStyle=`rgba(${s.c},${s.a})`;
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+}
+
+function dot(x,y,c,size=7){
+  ctx.fillStyle=c;
+  ctx.beginPath();
+  ctx.arc(x,y,size,0,Math.PI*2);
+  ctx.fill();
+}
+
+let theta=0;
+let tanWave=[];
+const MAX_POINTS=900;
+const SCALE_X=1.2;
+const TAN_SCALE_Y=50;
+
+function drawUnitCircle(){
+  const th=themes[theme];
+
+  if(theme===1) applyGlow(th.circle,25);
+  ctx.strokeStyle=th.circle;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.stroke();
+  clearGlow();
+
+  // 角度目盛りを細かく弧度法でつけるコードがここ
+  const angleMarks=[
+    0, Math.PI/6, Math.PI/3, Math.PI/2, 2*Math.PI/3, 5*Math.PI/6,
+    Math.PI, 7*Math.PI/6, 4*Math.PI/3, 3*Math.PI/2, 5*Math.PI/3, 11*Math.PI/6
+  ];
+  const angleLabels=[
+    "0","π/6","π/3","π/2","2π/3","5π/6",
+    "π","7π/6","4π/3","3π/2","5π/3","11π/6"
+  ];
+
+  ctx.fillStyle=th.text;
+  ctx.font="14px Segoe UI";
+
+  for(let i=0;i<angleMarks.length;i++){
+    const a=angleMarks[i];
+    const x1=cx+r*Math.cos(a);
+    const y1=cy-r*Math.sin(a);
+    const x2=cx+(r+10)*Math.cos(a);
+    const y2=cy-(r+10)*Math.sin(a);
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.strokeStyle=th.circle;
+    ctx.lineWidth=2;
+    ctx.stroke();
+
+    ctx.fillText(angleLabels[i], cx+(r+20)*Math.cos(a)-10, cy-(r+20)*Math.sin(a)+5);
+  }
+
+  const x=cx+r*Math.cos(theta);
+  const y=cy-r*Math.sin(theta);
+  dot(x,y,"#ff2e2e",9);
+
+  if(theme===1) applyGlow(th.tan,25);
+  ctx.strokeStyle=th.tan;
+  ctx.beginPath();
+  ctx.moveTo(cx+r,cy-r-300);
+  ctx.lineTo(cx+r,cy+r+300);
+  ctx.stroke();
+  clearGlow();
+
+  const tanVal=Math.tan(theta);
+
+  if(Math.abs(Math.cos(theta))>0.05){
+    const ty=cy-r*tanVal;
+
+    if(theme===1) applyGlow(th.tan,25);
+    ctx.beginPath();
+    ctx.moveTo(x,y);
+    ctx.lineTo(cx+r,ty);
+    ctx.stroke();
+    clearGlow();
+
+    dot(cx+r,ty,th.tan,8);
+  }
+
+  ctx.fillStyle=th.text;
+  ctx.font="22px Segoe UI";
+  ctx.fillText("θ = "+(theta/Math.PI).toFixed(2)+"π",
+               cx+r+30,cy-r-40);
+
+  ctx.fillStyle=th.tan;
+  ctx.fillText("tanθ = "+(Math.abs(tanVal)<50?tanVal.toFixed(2):"∞"),
+    cx+r+30,cy-r);
+}
+
+function drawTanGraph(){
+  const th=themes[theme];
+
+  const gx=80;
+  const gy=120;
+  const w=800;
+  const h=400;
+
+  ctx.fillStyle = theme===1 ? "#001515" : "rgba(25,25,40,0.75)";
+  ctx.fillRect(gx,gy,w,h);
+
+  // 横線のコード
+  ctx.strokeStyle="#333";
+  ctx.lineWidth=1;
+  for(let i=-4;i<=4;i++){
+    const y=gy+h/2-i*TAN_SCALE_Y;
+    ctx.beginPath();
+    ctx.moveTo(gx,y);
+    ctx.lineTo(gx+w,y);
+    ctx.stroke();
+
+    ctx.fillStyle=th.text;
+    ctx.font="14px Segoe UI";
+    ctx.fillText(i,gx-25,y+5);
+  }
+
+  // 縦線グラフの縦だけ
+  for(let i=0;i<=w;i+=100){
+    ctx.beginPath();
+    ctx.moveTo(gx+i,gy);
+    ctx.lineTo(gx+i,gy+h);
+    ctx.stroke();
+  }
+
+
+  ctx.setLineDash([6,6]);
+  ctx.strokeStyle="#aa00ff";
+  for(let i=0;i<w;i+=Math.PI/2*SCALE_X*50){
+    ctx.beginPath();
+    ctx.moveTo(gx+i,gy);
+    ctx.lineTo(gx+i,gy+h);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // ここがX軸のコード
+  ctx.strokeStyle=th.axis;
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(gx,gy+h/2);
+  ctx.lineTo(gx+w,gy+h/2);
+  ctx.stroke();
+
+  // tan波のコード滑らかに
+  if(theme===1) applyGlow(th.tan,25);
+  ctx.strokeStyle=th.tan;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+
+  let first=true;
+  for(let i=0;i<tanWave.length;i++){
+    const val=tanWave[i];
+    if(val===null){first=true;continue;}
+
+    const x=gx+w-i*SCALE_X;
+    const y=gy+h/2-val*TAN_SCALE_Y;
+
+    if(first){ctx.moveTo(x,y);first=false;}
+    else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  clearGlow();
+
+  ctx.fillStyle=th.tan;
+  ctx.font="22px Segoe UI";
+  ctx.fillText("y = tanθ",gx,gy-25);
+}
+
+function animate(){
+  drawBackground();
+  drawUnitCircle();
+
+  const t=Math.tan(theta);
+  if(Math.abs(Math.cos(theta))>0.05){
+    tanWave.unshift(t);
+  }else{
+    tanWave.unshift(null);
+  }
+  if(tanWave.length>MAX_POINTS)tanWave.pop();
+
+  drawTanGraph();
+
+  theta+=speed;
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>
